@@ -280,11 +280,14 @@
     const outlet = document.getElementById('outlet').value.trim();
     if(!url){ setRowStatus(entry.id, 'err'); setConnected(false); return; }
     try{
-      const res = await fetch(url, {
-        method:'POST',
-        headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({ kode: entry.kode, qty: entry.qty, petugas, outlet, timestamp: new Date().toISOString() })
+      const params = new URLSearchParams({
+        kode: entry.kode,
+        qty: entry.qty,
+        petugas: petugas,
+        outlet: outlet,
+        timestamp: new Date().toISOString()
       });
+      const res = await fetch(url + '?' + params.toString(), { method:'GET' });
       const data = await res.json();
       if(data && data.result === 'success'){ setRowStatus(entry.id, 'ok'); setConnected(true); }
       else{ setRowStatus(entry.id, 'err'); }
