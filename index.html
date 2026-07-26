@@ -289,23 +289,46 @@
     });
     const fullUrl = url + '?' + params.toString();
 
-    // Pakai fetch() sungguhan supaya kita bisa membaca hasil JSON asli dari
-    // Apps Script ({"result":"success"} atau {"result":"error",...}).
-    // Ini aman dipakai (tidak kena CORS) selama deployment Web App di-set
-    // "Who has access: Anyone", karena ContentService Apps Script otomatis
-    // mengizinkan cross-origin GET.
-    fetch(fullUrl, { method: 'GET', redirect: 'follow' })
-      .then(res => res.json())
-      .then(data => {
-        const ok = data && data.result === 'success';
-        setRowStatus(entry.id, ok ? 'ok' : 'err');
-        setConnected(ok);
-      })
-      .catch((err) => {
-        setRowStatus(entry.id, 'err');
-        setConnected(false);
-        alert('DEBUG - error fetch: ' + err.message + '\n\nURL yang dipakai:\n' + fullUrl);
-      });
+    // Pakai JSONP (bukan fetch/iframe) supaya SAMA SEKALI tidak tunduk aturan
+    // CORS -- caranya dengan memuat tag <script> dinamis, bukan request AJAX.
+    // Server (Code.gs) membungkus hasilnya sebagai pemanggilan fungsi
+    // callback ini, jadi kita tetap bisa tahu hasil sukses/gagal yang asli.
+    const callbackName = 'jsonpCallback_' + entry.id;
+    let finished = false;
+
+    window[callbackName] = function(data){
+      if(finished) return;
+      finished = true;
+      const ok = data && data.result === 'success';
+      setRowStatus(entry.id, ok ? 'ok' : 'err');
+      setConnected(ok);
+      cleanupJsonp_(script, callbackName);
+    };
+
+    const script = document.createElement('script');
+    script.src = fullUrl + '&callback=' + callbackName;
+    script.onerror = function(){
+      if(finished) return;
+      finished = true;
+      setRowStatus(entry.id, 'err');
+      setConnected(false);
+      cleanupJsonp_(script, callbackName);
+    };
+    document.body.appendChild(script);
+
+    // Jaga-jaga kalau callback tidak pernah terpanggil (mis. timeout jaringan)
+    setTimeout(function(){
+      if(finished) return;
+      finished = true;
+      setRowStatus(entry.id, 'err');
+      setConnected(false);
+      cleanupJsonp_(script, callbackName);
+    }, 8000);
+  }
+
+  function cleanupJsonp_(script, callbackName){
+    delete window[callbackName];
+    if(script && script.parentNode) script.parentNode.removeChild(script);
   }
 
   window.retryEntry = function(id){
