@@ -274,29 +274,43 @@
     sendToSheet(entry);
   }
 
-  async function sendToSheet(entry){
+  function sendToSheet(entry){
     const url = webAppUrlInput.value.trim();
     const petugas = document.getElementById('petugas').value.trim();
     const outlet = document.getElementById('outlet').value.trim();
     if(!url){ setRowStatus(entry.id, 'err'); setConnected(false); return; }
-    try{
-      const params = new URLSearchParams({
-        kode: entry.kode,
-        qty: entry.qty,
-        petugas: petugas,
-        outlet: outlet,
-        timestamp: new Date().toISOString()
-      });
-      // mode 'no-cors': browser tetap mengirim request dan Apps Script tetap
-      // menyimpan datanya, tapi kita tidak bisa membaca isi balasannya (opaque).
-      // Karena itu, kalau tidak ada error jaringan, kita anggap berhasil.
-      await fetch(url + '?' + params.toString(), { method:'GET', mode:'no-cors' });
-      setRowStatus(entry.id, 'ok');
-      setConnected(true);
-    } catch(err){
-      setRowStatus(entry.id, 'err');
-      setConnected(false);
-    }
+
+    const params = new URLSearchParams({
+      kode: entry.kode,
+      qty: entry.qty,
+      petugas: petugas,
+      outlet: outlet,
+      timestamp: new Date().toISOString()
+    });
+    const fullUrl = url + '?' + params.toString();
+
+    // Kirim lewat iframe tersembunyi, bukan fetch(), supaya tidak kena
+    // blokir CORS yang sering terjadi kalau halaman di-hosting di luar
+    // domain Google (mis. GitHub Pages). Ini murni request GET biasa,
+    // sama seperti kalau kita ketik URL itu langsung di address bar.
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = fullUrl;
+    document.body.appendChild(iframe);
+
+    let settled = false;
+    const finish = (ok) => {
+      if(settled) return;
+      settled = true;
+      setRowStatus(entry.id, ok ? 'ok' : 'err');
+      setConnected(ok);
+      setTimeout(() => iframe.remove(), 1000);
+    };
+
+    iframe.onload = () => finish(true);
+    iframe.onerror = () => finish(false);
+    // Jaga-jaga kalau event onload tidak terpicu (beberapa browser HP begitu)
+    setTimeout(() => finish(true), 4000);
   }
 
   window.retryEntry = function(id){
