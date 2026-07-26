@@ -287,11 +287,16 @@
         outlet: outlet,
         timestamp: new Date().toISOString()
       });
-      const res = await fetch(url + '?' + params.toString(), { method:'GET' });
-      const data = await res.json();
-      if(data && data.result === 'success'){ setRowStatus(entry.id, 'ok'); setConnected(true); }
-      else{ setRowStatus(entry.id, 'err'); }
-    } catch(err){ setRowStatus(entry.id, 'err'); setConnected(false); }
+      // mode 'no-cors': browser tetap mengirim request dan Apps Script tetap
+      // menyimpan datanya, tapi kita tidak bisa membaca isi balasannya (opaque).
+      // Karena itu, kalau tidak ada error jaringan, kita anggap berhasil.
+      await fetch(url + '?' + params.toString(), { method:'GET', mode:'no-cors' });
+      setRowStatus(entry.id, 'ok');
+      setConnected(true);
+    } catch(err){
+      setRowStatus(entry.id, 'err');
+      setConnected(false);
+    }
   }
 
   window.retryEntry = function(id){
