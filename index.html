@@ -312,6 +312,7 @@
       finished = true;
       setRowStatus(entry.id, 'err');
       setConnected(false);
+      alert('DEBUG - script.onerror terpicu (network/parse error)\n\nURL:\n' + script.src);
       cleanupJsonp_(script, callbackName);
     };
     document.body.appendChild(script);
@@ -322,6 +323,7 @@
       finished = true;
       setRowStatus(entry.id, 'err');
       setConnected(false);
+      alert('DEBUG - TIMEOUT (8 detik), tidak ada onerror maupun callback\n\nURL:\n' + script.src);
       cleanupJsonp_(script, callbackName);
     }, 8000);
   }
