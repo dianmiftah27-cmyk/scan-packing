@@ -60,6 +60,7 @@
     transition:border-color .2s, box-shadow .2s;
   }
   .scan-frame.hit{border-color:var(--good); box-shadow:0 0 0 2000px rgba(47,158,68,.18), 0 0 0 2000px rgba(0,0,0,.1);}
+  .scan-frame.warn{border-color:var(--bad); box-shadow:0 0 0 2000px rgba(214,69,91,.2), 0 0 0 2000px rgba(0,0,0,.1);}
   .cam-msg{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:#CFE3E9; font-size:13px; text-align:center; padding:20px;
@@ -72,6 +73,18 @@
   .detected-box .kode-txt{font-family:var(--mono); font-size:16px; font-weight:600; color:var(--accent-deep); word-break:break-all;}
   .detected-box .lbl{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em;}
 
+  .label-info-box{
+    display:flex; flex-direction:column; gap:2px; padding:12px; margin-top:10px;
+    background:#F7FAFB; border:1.5px solid var(--line); border-radius:12px;
+  }
+  .label-info-box.expired{background:rgba(214,69,91,.06); border-color:rgba(214,69,91,.4);}
+  .label-info-box.soon{background:rgba(232,163,61,.08); border-color:rgba(232,163,61,.5);}
+  .label-info-box .lbl{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; margin-bottom:2px;}
+  .label-info-box .nama{font-weight:700; font-size:14.5px;}
+  .label-info-box .meta{font-size:12px; color:var(--ink-soft); margin-top:1px;}
+  .label-info-box .exp-row{display:flex; justify-content:space-between; align-items:center; margin-top:8px;}
+  .label-info-box .exp-txt{font-family:var(--mono); font-size:12.5px;}
+
   .qty-row{display:flex; gap:10px; margin-top:10px; align-items:flex-end;}
   .qty-row .field{flex:1; margin-bottom:0;}
   #qty{font-family:var(--mono); font-size:18px; font-weight:600; text-align:center;}
@@ -82,13 +95,14 @@
   .btn:active{transform:scale(.97);}
   .btn-primary{background:var(--accent); color:#fff;}
   .btn-primary:disabled{background:#B9CBD1; cursor:not-allowed;}
+  .btn-danger{background:var(--bad); color:#fff;}
   .btn-ghost{background:none; color:var(--accent-deep); text-decoration:underline; font-size:12px; padding:6px 0;}
 
   table{width:100%; border-collapse:collapse; font-size:12.5px;}
   th{text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); padding:7px 4px; border-bottom:1.5px solid var(--line);}
   td{padding:8px 4px; border-bottom:1px solid var(--line); font-family:var(--mono); font-size:12px;}
   tr:last-child td{border-bottom:none;}
-  .badge{display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:600; font-family:var(--sans);}
+  .badge{display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:600; font-family:var(--sans); white-space:nowrap;}
   .badge.ok{background:rgba(47,158,68,.12); color:var(--good);}
   .badge.err{background:rgba(214,69,91,.12); color:var(--bad);}
   .badge.pending{background:rgba(232,163,61,.15); color:#9c6d1f;}
@@ -144,6 +158,16 @@
       </div>
     </div>
 
+    <div class="label-info-box" id="labelInfoBox" style="display:none;">
+      <div class="lbl">Info Produk</div>
+      <div class="nama" id="labelNama">-</div>
+      <div class="meta" id="labelKategori">-</div>
+      <div class="exp-row">
+        <span class="exp-txt" id="labelExpired">-</span>
+        <span class="badge" id="labelStatusBadge">-</span>
+      </div>
+    </div>
+
     <div class="qty-row" id="qtyRow" style="display:none;">
       <div class="field">
         <label>Qty Packing</label>
@@ -162,7 +186,7 @@
       <div class="stat"><div class="num" id="statFail">0</div><div class="lbl">Gagal</div></div>
     </div>
     <table>
-      <thead><tr><th>Waktu</th><th>Kode</th><th>Qty</th><th>Status</th></tr></thead>
+      <thead><tr><th>Waktu</th><th>Kode</th><th>Qty</th><th>Exp</th><th>Status</th></tr></thead>
       <tbody id="logBody"></tbody>
     </table>
     <div class="empty" id="emptyMsg">Belum ada scan.</div>
@@ -170,12 +194,17 @@
 </div>
 
 <script>
-  const DEFAULT_WEBAPP_URL = ""; // <- opsional: tempel URL Web App di sini biar auto-terisi tiap buka halaman
+  const DEFAULT_WEBAPP_URL = ""; // <- opsional: tempel URL Web App Scan Packing di sini biar auto-terisi tiap buka halaman
 
   const camMsg = document.getElementById('camMsg');
   const scanFrame = document.getElementById('scanFrame');
   const detectedBox = document.getElementById('detectedBox');
   const detectedKode = document.getElementById('detectedKode');
+  const labelInfoBox = document.getElementById('labelInfoBox');
+  const labelNama = document.getElementById('labelNama');
+  const labelKategori = document.getElementById('labelKategori');
+  const labelExpired = document.getElementById('labelExpired');
+  const labelStatusBadge = document.getElementById('labelStatusBadge');
   const qtyRow = document.getElementById('qtyRow');
   const qtyInput = document.getElementById('qty');
   const saveBtn = document.getElementById('saveBtn');
@@ -190,6 +219,7 @@
 
   let entries = [];
   let currentKode = null;
+  let currentLabelInfo = null;
   let html5QrCode = null;
   let scanning = false;
 
@@ -205,11 +235,18 @@
     return '<span class="badge pending">Mengirim…</span>';
   }
 
+  function expBadgeHtml(info){
+    if(!info) return '<span style="color:var(--ink-soft);">-</span>';
+    const cls = info.status === 'SUDAH EXPIRED' ? 'err' : (info.status === 'SEGERA EXPIRED' ? 'pending' : 'ok');
+    const tgl = info.tanggalExpired || '-';
+    return `${tgl}<br><span class="badge ${cls}">${info.status || '-'}</span>`;
+  }
+
   function renderRow(entry){
     emptyMsg.style.display = 'none';
     const tr = document.createElement('tr');
     tr.dataset.id = entry.id;
-    tr.innerHTML = `<td>${entry.time}</td><td>${entry.kode}</td><td>${entry.qty}</td><td>${badgeHtml(entry.status, entry.id)}</td>`;
+    tr.innerHTML = `<td>${entry.time}</td><td>${entry.kode}</td><td>${entry.qty}</td><td>${expBadgeHtml(entry.labelInfo)}</td><td>${badgeHtml(entry.status, entry.id)}</td>`;
     logBody.prepend(tr);
   }
 
@@ -226,7 +263,83 @@
     statusText.textContent = on ? 'Terhubung' : 'Belum terhubung';
   }
 
-  function onScanSuccess(decodedText){
+  // --- Deteksi apakah kode yang di-scan adalah URL sistem Label Produksi ---
+  function extractLabelParts(text){
+    try{
+      const url = new URL(text);
+      if(!/script\.google\.com/.test(url.hostname)) return null;
+      const id = url.searchParams.get('id');
+      if(!id) return null;
+      return { baseUrl: url.origin + url.pathname, id: id };
+    }catch(err){
+      return null;
+    }
+  }
+
+  // --- Ambil info produk (termasuk tanggal expired) dari sistem Label lewat JSONP ---
+  function fetchLabelInfo(baseUrl, id){
+    return new Promise((resolve)=>{
+      const cbName = 'labelCb_' + Date.now() + Math.floor(Math.random()*1000);
+      let done = false;
+
+      window[cbName] = function(data){
+        if(done) return;
+        done = true;
+        resolve(data);
+        cleanupJsonp_(script, cbName);
+      };
+
+      const script = document.createElement('script');
+      script.src = baseUrl + '?id=' + encodeURIComponent(id) + '&format=json&callback=' + cbName;
+      script.onerror = function(){
+        if(done) return;
+        done = true;
+        resolve(null);
+        cleanupJsonp_(script, cbName);
+      };
+      document.body.appendChild(script);
+
+      setTimeout(function(){
+        if(done) return;
+        done = true;
+        resolve(null);
+        cleanupJsonp_(script, cbName);
+      }, 6000);
+    });
+  }
+
+  function statusBadgeClass(status){
+    if(status === 'SUDAH EXPIRED') return 'err';
+    if(status === 'SEGERA EXPIRED') return 'pending';
+    return 'ok';
+  }
+
+  function showLabelInfo(info){
+    labelInfoBox.classList.remove('expired','soon');
+    if(!info || !info.found){
+      labelNama.textContent = 'Info produk tidak ditemukan';
+      labelKategori.textContent = '';
+      labelExpired.textContent = '';
+      labelStatusBadge.textContent = '';
+      labelStatusBadge.className = 'badge';
+      return;
+    }
+    labelNama.textContent = info.namaProduk || '-';
+    labelKategori.textContent = [info.kategori, info.lokasi].filter(Boolean).join(' • ');
+    labelExpired.textContent = 'Exp: ' + (info.tanggalExpired || '-');
+    labelStatusBadge.textContent = info.status || '-';
+    labelStatusBadge.className = 'badge ' + statusBadgeClass(info.status);
+
+    if(info.status === 'SUDAH EXPIRED'){
+      labelInfoBox.classList.add('expired');
+      scanFrame.classList.add('warn');
+      if(navigator.vibrate) navigator.vibrate([120,60,120]);
+    } else if(info.status === 'SEGERA EXPIRED'){
+      labelInfoBox.classList.add('soon');
+    }
+  }
+
+  async function onScanSuccess(decodedText){
     if(!scanning) return;
     scanning = false;
     if(navigator.vibrate) navigator.vibrate(80);
@@ -237,14 +350,38 @@
     qtyRow.style.display = 'flex';
     cancelBtn.style.display = 'block';
     html5QrCode.pause(true);
+
+    currentLabelInfo = null;
+    labelInfoBox.style.display = 'none';
+    labelInfoBox.classList.remove('expired','soon');
+
+    const parts = extractLabelParts(decodedText);
+    if(parts){
+      labelInfoBox.style.display = 'flex';
+      labelNama.textContent = 'Mengambil info produk…';
+      labelKategori.textContent = '';
+      labelExpired.textContent = '';
+      labelStatusBadge.textContent = '';
+      labelStatusBadge.className = 'badge';
+
+      const info = await fetchLabelInfo(parts.baseUrl, parts.id);
+      if(info && info.found){
+        currentLabelInfo = info;
+      }
+      showLabelInfo(info);
+    }
+
     setTimeout(()=>{ qtyInput.focus(); }, 150);
   }
 
   function resetScanUI(){
-    scanFrame.classList.remove('hit');
+    scanFrame.classList.remove('hit','warn');
     detectedBox.style.display = 'none';
     qtyRow.style.display = 'none';
     cancelBtn.style.display = 'none';
+    labelInfoBox.style.display = 'none';
+    labelInfoBox.classList.remove('expired','soon');
+    currentLabelInfo = null;
     qtyInput.value = '';
     currentKode = null;
   }
@@ -258,16 +395,23 @@
   saveBtn.addEventListener('click', ()=>{
     const qty = qtyInput.value.trim();
     if(!currentKode || !qty){ return; }
-    submitEntry(currentKode, qty);
+
+    // Kalau produk sudah expired, minta konfirmasi dulu sebelum simpan
+    if(currentLabelInfo && currentLabelInfo.status === 'SUDAH EXPIRED'){
+      const lanjut = confirm('Produk ini SUDAH EXPIRED (' + (currentLabelInfo.tanggalExpired || '-') + ').\nTetap simpan data packing ini?');
+      if(!lanjut) return;
+    }
+
+    submitEntry(currentKode, qty, currentLabelInfo);
     resetScanUI();
     html5QrCode.resume();
     scanning = true;
   });
 
-  function submitEntry(kode, qty){
+  function submitEntry(kode, qty, labelInfo){
     const id = Date.now() + Math.floor(Math.random()*1000);
     const time = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-    const entry = {id, kode, qty, time, status:'pending'};
+    const entry = {id, kode, qty, time, status:'pending', labelInfo: labelInfo || null};
     entries.unshift(entry);
     renderRow(entry);
     updateStats();
@@ -280,12 +424,19 @@
     const outlet = document.getElementById('outlet').value.trim();
     if(!url){ setRowStatus(entry.id, 'err'); setConnected(false); return; }
 
+    const info = entry.labelInfo || {};
     const params = new URLSearchParams({
       kode: entry.kode,
       qty: entry.qty,
       petugas: petugas,
       outlet: outlet,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      namaProduk: info.namaProduk || '',
+      kategori: info.kategori || '',
+      lokasi: info.lokasi || '',
+      tanggalProduksi: info.tanggalProduksi || '',
+      tanggalExpired: info.tanggalExpired || '',
+      statusExpired: info.status || ''
     });
     const fullUrl = url + '?' + params.toString();
 
@@ -312,7 +463,6 @@
       finished = true;
       setRowStatus(entry.id, 'err');
       setConnected(false);
-      alert('DEBUG - script.onerror terpicu (network/parse error)\n\nURL:\n' + script.src);
       cleanupJsonp_(script, callbackName);
     };
     document.body.appendChild(script);
@@ -323,7 +473,6 @@
       finished = true;
       setRowStatus(entry.id, 'err');
       setConnected(false);
-      alert('DEBUG - TIMEOUT (8 detik), tidak ada onerror maupun callback\n\nURL:\n' + script.src);
       cleanupJsonp_(script, callbackName);
     }, 8000);
   }
