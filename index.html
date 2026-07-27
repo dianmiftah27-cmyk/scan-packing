@@ -242,11 +242,23 @@
     return `${tgl}<br><span class="badge ${cls}">${info.status || '-'}</span>`;
   }
 
+  // Kalau kode berupa URL Label yang panjang, tampilkan versi ringkas saja
+  // (nama produk kalau sudah ketemu, atau ID label saja kalau belum).
+  function shortDisplayKode(kode, labelInfo){
+    const parts = extractLabelParts(kode);
+    if(parts){
+      if(labelInfo && labelInfo.namaProduk) return labelInfo.namaProduk;
+      return parts.id;
+    }
+    return kode;
+  }
+
   function renderRow(entry){
     emptyMsg.style.display = 'none';
     const tr = document.createElement('tr');
     tr.dataset.id = entry.id;
-    tr.innerHTML = `<td>${entry.time}</td><td>${entry.kode}</td><td>${entry.qty}</td><td>${expBadgeHtml(entry.labelInfo)}</td><td>${badgeHtml(entry.status, entry.id)}</td>`;
+    const tampilan = shortDisplayKode(entry.kode, entry.labelInfo);
+    tr.innerHTML = `<td>${entry.time}</td><td title="${entry.kode}">${tampilan}</td><td>${entry.qty}</td><td>${expBadgeHtml(entry.labelInfo)}</td><td>${badgeHtml(entry.status, entry.id)}</td>`;
     logBody.prepend(tr);
   }
 
@@ -304,7 +316,7 @@
         done = true;
         resolve(null);
         cleanupJsonp_(script, cbName);
-      }, 6000);
+      }, 12000);
     });
   }
 
@@ -345,7 +357,6 @@
     if(navigator.vibrate) navigator.vibrate(80);
     scanFrame.classList.add('hit');
     currentKode = decodedText;
-    detectedKode.textContent = decodedText;
     detectedBox.style.display = 'flex';
     qtyRow.style.display = 'flex';
     cancelBtn.style.display = 'block';
@@ -357,6 +368,8 @@
 
     const parts = extractLabelParts(decodedText);
     if(parts){
+      // Kode berupa URL Label -> jangan tampilkan URL panjang, cukup ID-nya dulu
+      detectedKode.textContent = parts.id;
       labelInfoBox.style.display = 'flex';
       labelNama.textContent = 'Mengambil info produk…';
       labelKategori.textContent = '';
@@ -369,6 +382,9 @@
         currentLabelInfo = info;
       }
       showLabelInfo(info);
+    } else {
+      // Bukan kode Label (mis. barcode biasa) -> tampilkan apa adanya
+      detectedKode.textContent = decodedText;
     }
 
     setTimeout(()=>{ qtyInput.focus(); }, 150);
@@ -426,6 +442,7 @@
 
     const info = entry.labelInfo || {};
     const params = new URLSearchParams({
+      entryId: String(entry.id),
       kode: entry.kode,
       qty: entry.qty,
       petugas: petugas,
@@ -467,14 +484,17 @@
     };
     document.body.appendChild(script);
 
-    // Jaga-jaga kalau callback tidak pernah terpanggil (mis. timeout jaringan)
+    // Jaga-jaga kalau callback tidak pernah terpanggil (mis. timeout jaringan).
+    // Apps Script kadang butuh waktu lebih lama merespon (terutama abis baru
+    // di-deploy ulang), jadi timeout dibuat cukup longgar (25 detik) supaya
+    // tidak salah lapor "Gagal" padahal datanya sebenarnya sudah masuk ke sheet.
     setTimeout(function(){
       if(finished) return;
       finished = true;
       setRowStatus(entry.id, 'err');
       setConnected(false);
       cleanupJsonp_(script, callbackName);
-    }, 8000);
+    }, 25000);
   }
 
   function cleanupJsonp_(script, callbackName){
