@@ -40,12 +40,13 @@
   .field{display:flex; flex-direction:column; gap:4px; margin-bottom:9px;}
   .field:last-child{margin-bottom:0;}
   label{font-size:11.5px; color:var(--ink-soft); font-weight:600;}
-  input{
+  input, select{
     font-family:var(--sans); font-size:15px; padding:10px 11px;
     border:1.5px solid var(--line); border-radius:9px; background:#FBFCFD; color:var(--ink);
     outline:none; width:100%;
   }
-  input:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(11,132,165,.12);}
+  select{appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235B6B76' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>"); background-repeat:no-repeat; background-position:right 12px center; padding-right:34px;}
+  input:focus, select:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(11,132,165,.12);}
   .hint{font-size:11.5px; color:var(--ink-soft); margin-top:8px; line-height:1.5;}
   .hint b{color:var(--ink);}
 
@@ -127,20 +128,20 @@
 
   <div class="card">
     <details>
-      <summary>Pengaturan koneksi &amp; petugas</summary>
-      <div class="field">
-        <label>URL Web App (Google Apps Script)</label>
-        <input id="webAppUrl" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
-      </div>
+      <summary>Petugas &amp; outlet</summary>
       <div class="field">
         <label>Nama Petugas</label>
-        <input id="petugas" placeholder="mis. Faizal">
+        <select id="petugas">
+          <option value="">-- Pilih Petugas --</option>
+        </select>
       </div>
       <div class="field">
         <label>Outlet Tujuan (opsional)</label>
-        <input id="outlet" placeholder="mis. IKPN Bintaro">
+        <select id="outlet">
+          <option value="">-- Pilih Outlet --</option>
+        </select>
       </div>
-      <div class="hint">Isi URL Web App sekali di sini. Karena ini halaman yang tersimpan di HP, kalau mau permanen tanpa isi ulang tiap buka, edit langsung nilai <b>DEFAULT_WEBAPP_URL</b> di bagian bawah file HTML ini sebelum dipakai sehari-hari.</div>
+      <div class="hint">URL Web App sudah permanen (tersimpan di dalam kode halaman ini). Daftar nama petugas &amp; outlet juga sudah diatur di kode &mdash; edit bagian <b>PETUGAS_LIST</b> dan <b>OUTLET_LIST</b> di bawah file HTML ini kalau ada perubahan nama/outlet.</div>
     </details>
   </div>
 
@@ -194,7 +195,55 @@
 </div>
 
 <script>
-  const DEFAULT_WEBAPP_URL = ""; // <- opsional: tempel URL Web App Scan Packing di sini biar auto-terisi tiap buka halaman
+  // ====================== KONFIGURASI (edit di sini) ======================
+  // 1) Tempel URL Web App Google Apps Script kamu (akhiran /exec) di bawah ini.
+  //    Sekali diisi, halaman ini akan SELALU pakai URL ini tanpa perlu ketik ulang.
+  const DEFAULT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxGS1MdRyHEu8vqIDL6yyBfvz6S7_UTwJ2JxqYaWpkH-rsPunCX3i3HpWHHi6EZ-q9Y/exec";
+
+  // 2) Daftar nama petugas yang muncul di dropdown "Nama Petugas".
+  //    Tambah/ubah/hapus nama sesuai kebutuhan.
+  const PETUGAS_LIST = [
+    "Dian",
+    "Fidra",
+    "Zaki",
+    "Fazril"
+  ];
+
+  // 3) Daftar outlet tujuan yang muncul di dropdown "Outlet Tujuan".
+  //    Tambah/ubah/hapus outlet sesuai kebutuhan.
+  const OUTLET_LIST = [
+    "Unla",
+    "Sekeloa",
+    "Cisitu",
+    "Unpar",
+    "Gerlong",
+    "Maranatha",
+    "Cihanjuang",
+    "Unjani",
+    "Melong",
+    "CK Melong",
+    "Unisba",
+    "Kopo",
+    "Sukapura",
+    "Metro",
+    "Antapani",
+    "Widyatama",
+    "Ujung Berung",
+    "Uin Bandung",
+    "Jatinangor",
+    "Tebet",
+    "Trisakti",
+    "Binus",
+    "Mercubuana",
+    "Bintaro",
+    "Uin Jakarta",
+    "Uhamka",
+    "Kelapa Dua",
+    "Kukusan",
+    "Unpam",
+    "Dramaga"    
+  ];
+  // ==========================================================================
 
   const camMsg = document.getElementById('camMsg');
   const scanFrame = document.getElementById('scanFrame');
@@ -213,9 +262,19 @@
   const emptyMsg = document.getElementById('emptyMsg');
   const statusPill = document.getElementById('statusPill');
   const statusText = document.getElementById('statusText');
-  const webAppUrlInput = document.getElementById('webAppUrl');
+  const petugasSelect = document.getElementById('petugas');
+  const outletSelect = document.getElementById('outlet');
 
-  webAppUrlInput.value = DEFAULT_WEBAPP_URL;
+  function populateSelect(selectEl, list){
+    list.forEach(function(name){
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      selectEl.appendChild(opt);
+    });
+  }
+  populateSelect(petugasSelect, PETUGAS_LIST);
+  populateSelect(outletSelect, OUTLET_LIST);
 
   let entries = [];
   let currentKode = null;
@@ -435,9 +494,9 @@
   }
 
   function sendToSheet(entry){
-    const url = webAppUrlInput.value.trim();
-    const petugas = document.getElementById('petugas').value.trim();
-    const outlet = document.getElementById('outlet').value.trim();
+    const url = DEFAULT_WEBAPP_URL.trim();
+    const petugas = petugasSelect.value.trim();
+    const outlet = outletSelect.value.trim();
     if(!url){ setRowStatus(entry.id, 'err'); setConnected(false); return; }
 
     const info = entry.labelInfo || {};
