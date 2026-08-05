@@ -50,6 +50,7 @@
   .hint{font-size:11.5px; color:var(--ink-soft); margin-top:8px; line-height:1.5;}
   .hint b{color:var(--ink);}
 
+  #readerOuter{position:relative;}
   #reader{
     width:100%; border-radius:14px; overflow:hidden; background:#0C1A22;
     aspect-ratio:1/1; position:relative;
@@ -62,9 +63,49 @@
   }
   .scan-frame.hit{border-color:var(--good); box-shadow:0 0 0 2000px rgba(47,158,68,.18), 0 0 0 2000px rgba(0,0,0,.1);}
   .scan-frame.warn{border-color:var(--bad); box-shadow:0 0 0 2000px rgba(214,69,91,.2), 0 0 0 2000px rgba(0,0,0,.1);}
+  /* sweeping scan line for immediate visual feedback that the camera is actively decoding */
+  .scan-line{
+    position:absolute; left:14%; right:14%; top:14%; height:2px;
+    background:linear-gradient(90deg, transparent, var(--accent) 20%, var(--accent) 80%, transparent);
+    box-shadow:0 0 8px 1px rgba(11,132,165,.7);
+    animation:sweep 1.6s ease-in-out infinite; pointer-events:none;
+  }
+  .scan-line.hidden{display:none;}
+  @keyframes sweep{
+    0%{ top:14%; opacity:0; }
+    8%{ opacity:1; }
+    50%{ top:calc(86% - 2px); opacity:1; }
+    92%{ opacity:1; }
+    100%{ top:14%; opacity:0; }
+  }
   .cam-msg{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    color:#CFE3E9; font-size:13px; text-align:center; padding:20px;
+    color:#CFE3E9; font-size:13px; text-align:center; padding:20px; z-index:2;
+  }
+  .cam-controls{
+    position:absolute; top:10px; right:10px; display:flex; gap:8px; z-index:3;
+  }
+  .cam-btn{
+    width:38px; height:38px; border-radius:50%; border:none; cursor:pointer;
+    background:rgba(12,26,34,.55); color:#fff; display:flex; align-items:center; justify-content:center;
+    backdrop-filter:blur(2px); transition:background .15s, transform .08s;
+  }
+  .cam-btn:active{transform:scale(.92);}
+  .cam-btn.active{background:var(--accent);}
+  .cam-btn svg{width:18px; height:18px;}
+  .zoom-row{
+    position:absolute; left:10px; right:56px; bottom:12px; z-index:3;
+    display:flex; align-items:center; gap:8px;
+  }
+  .zoom-row input[type=range]{
+    -webkit-appearance:none; width:100%; height:26px; background:transparent; padding:0;
+  }
+  .zoom-row input[type=range]::-webkit-slider-runnable-track{
+    height:4px; background:rgba(255,255,255,.35); border-radius:4px;
+  }
+  .zoom-row input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:16px; height:16px; margin-top:-6px; border-radius:50%;
+    background:var(--accent); border:2px solid #fff;
   }
 
   .detected-box{
@@ -147,9 +188,20 @@
 
   <div class="card">
     <h2>Arahkan kamera ke barcode/QR</h2>
-    <div id="reader">
-      <div class="scan-frame" id="scanFrame"></div>
-      <div class="cam-msg" id="camMsg">Menyalakan kamera…</div>
+    <div id="readerOuter">
+      <div id="reader">
+        <div class="scan-frame" id="scanFrame"></div>
+        <div class="scan-line" id="scanLine"></div>
+        <div class="cam-msg" id="camMsg">Menyalakan kamera…</div>
+      </div>
+      <div class="cam-controls">
+        <button class="cam-btn" id="torchBtn" title="Senter" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a6 6 0 00-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0012 2z"/></svg>
+        </button>
+      </div>
+      <div class="zoom-row" id="zoomRow" style="display:none;">
+        <input type="range" id="zoomSlider" min="1" max="5" step="0.1" value="1">
+      </div>
     </div>
 
     <div class="detected-box" id="detectedBox" style="display:none;">
@@ -247,6 +299,7 @@
 
   const camMsg = document.getElementById('camMsg');
   const scanFrame = document.getElementById('scanFrame');
+  const scanLine = document.getElementById('scanLine');
   const detectedBox = document.getElementById('detectedBox');
   const detectedKode = document.getElementById('detectedKode');
   const labelInfoBox = document.getElementById('labelInfoBox');
@@ -264,6 +317,9 @@
   const statusText = document.getElementById('statusText');
   const petugasSelect = document.getElementById('petugas');
   const outletSelect = document.getElementById('outlet');
+  const torchBtn = document.getElementById('torchBtn');
+  const zoomRow = document.getElementById('zoomRow');
+  const zoomSlider = document.getElementById('zoomSlider');
 
   function populateSelect(selectEl, list){
     list.forEach(function(name){
@@ -281,6 +337,7 @@
   let currentLabelInfo = null;
   let html5QrCode = null;
   let scanning = false;
+  let torchOn = false;
 
   function updateStats(){
     document.getElementById('statItems').textContent = entries.length;
@@ -415,6 +472,7 @@
     scanning = false;
     if(navigator.vibrate) navigator.vibrate(80);
     scanFrame.classList.add('hit');
+    scanLine.classList.add('hidden');
     currentKode = decodedText;
     detectedBox.style.display = 'flex';
     qtyRow.style.display = 'flex';
@@ -449,11 +507,12 @@
       detectedKode.textContent = decodedText;
     }
 
-    setTimeout(()=>{ qtyInput.focus(); }, 150);
+    qtyInput.focus();
   }
 
   function resetScanUI(){
     scanFrame.classList.remove('hit','warn');
+    scanLine.classList.remove('hidden');
     detectedBox.style.display = 'none';
     qtyRow.style.display = 'none';
     cancelBtn.style.display = 'none';
@@ -569,6 +628,60 @@
     if(entry) sendToSheet(entry);
   };
 
+  // --- Senter (torch) & zoom: dicek sekali kamera nyala, tombol/slider cuma
+  // muncul kalau device memang mendukung, biar tidak nampilin kontrol mati ---
+  function setupCameraCapabilities(){
+    try{
+      const track = html5QrCode.getRunningTrackCameraCapabilities ? null : null;
+    }catch(e){}
+    let capabilities = null;
+    try{
+      capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+    }catch(e){ capabilities = null; }
+    if(!capabilities) return;
+
+    if(typeof capabilities.torchFeature === 'function'){
+      const torch = capabilities.torchFeature();
+      if(torch && torch.isSupported && torch.isSupported()){
+        torchBtn.style.display = 'flex';
+        torchBtn.onclick = function(){
+          torchOn = !torchOn;
+          torch.apply(torchOn);
+          torchBtn.classList.toggle('active', torchOn);
+        };
+      }
+    }
+    if(typeof capabilities.zoomFeature === 'function'){
+      const zoom = capabilities.zoomFeature();
+      if(zoom && zoom.isSupported && zoom.isSupported()){
+        const min = zoom.min ? zoom.min() : 1;
+        const max = zoom.max ? zoom.max() : 5;
+        const step = zoom.step ? zoom.step() : 0.1;
+        zoomSlider.min = min; zoomSlider.max = max; zoomSlider.step = step;
+        zoomSlider.value = zoom.value ? zoom.value() : min;
+        zoomRow.style.display = 'flex';
+        zoomSlider.oninput = function(){
+          zoom.apply(parseFloat(zoomSlider.value));
+        };
+      }
+    }
+  }
+
+  // Tap di area kamera untuk minta browser fokus ulang ke titik itu (kalau
+  // device mendukung "focusMode: manual"/point-of-interest) -- ini yang
+  // bikin scan barcode dekat/miring kerasa lebih responsif kayak app QRIS.
+  function setupTapToFocus(){
+    const readerEl = document.getElementById('reader');
+    readerEl.addEventListener('click', function(){
+      try{
+        const track = html5QrCode.getRunningTrackCameraCapabilities ? null : null;
+      }catch(e){}
+      try{
+        html5QrCode.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] });
+      }catch(e){ /* diamkan kalau tidak didukung */ }
+    });
+  }
+
   async function startScanner(){
     html5QrCode = new Html5Qrcode("reader", {
       formatsToSupport: [
@@ -589,8 +702,16 @@
       await html5QrCode.start(
         { facingMode: "environment" },
         {
-          fps: 24,                      // dari 12 -> 24: kamera "dibaca" 2x lebih sering per detik
-          qrbox: { width: 260, height: 260 },
+          fps: 30,                      // 24 -> 30: kamera "dibaca" lebih sering per detik, kayak scanner QRIS
+          // qrbox dibuat FUNGSI (bukan angka tetap) supaya area deteksi selalu
+          // ~72% dari sisi terpendek video, persis sama dengan kotak hijau yang
+          // ditampilkan di layar (scan-frame) -- jadi user tidak bingung kenapa
+          // barcode yang sudah pas di kotak tidak kebaca.
+          qrbox: function(viewfinderWidth, viewfinderHeight){
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const size = Math.floor(minEdge * 0.72);
+            return { width: size, height: size };
+          },
           aspectRatio: 1.0,
           disableFlip: true,            // skip percobaan gambar dibalik/mirror -> proses tiap frame ~2x lebih cepat
           videoConstraints: {
@@ -598,6 +719,7 @@
             // minta resolusi & fokus yang bantu percepat autofokus/deteksi di HP yang mendukung
             width: { ideal: 1280 },
             height: { ideal: 720 },
+            frameRate: { ideal: 30 },
             advanced: [{ focusMode: "continuous" }]
           }
         },
@@ -606,6 +728,8 @@
       );
       camMsg.style.display = 'none';
       scanning = true;
+      setupCameraCapabilities();
+      setupTapToFocus();
     }catch(err){
       camMsg.textContent = 'Tidak bisa akses kamera. Pastikan izin kamera diaktifkan lalu muat ulang halaman.';
     }
