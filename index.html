@@ -419,7 +419,10 @@
     detectedBox.style.display = 'flex';
     qtyRow.style.display = 'flex';
     cancelBtn.style.display = 'block';
-    html5QrCode.pause(true);
+    // Penting: pause TANPA menghentikan video stream (shouldPauseVideo = false).
+    // Kalau video ikut dihentikan, kamera harus "reboot" tiap kali resume,
+    // ini yang paling bikin scan berikutnya terasa lambat.
+    html5QrCode.pause();
 
     currentLabelInfo = null;
     labelInfoBox.style.display = 'none';
@@ -576,12 +579,28 @@
         Html5QrcodeSupportedFormats.CODE_39,
         Html5QrcodeSupportedFormats.UPC_A
       ],
+      // Native BarcodeDetector browser (Chrome/Android) jauh lebih cepat &
+      // lebih akurat dibanding decoder JS bawaan library -- dipakai otomatis
+      // kalau device/browser mendukung, fallback ke decoder biasa kalau tidak.
+      useBarCodeDetectorIfSupported: true,
       verbose:false
     });
     try{
       await html5QrCode.start(
         { facingMode: "environment" },
-        { fps: 12, qrbox: { width: 240, height: 240 } },
+        {
+          fps: 24,                      // dari 12 -> 24: kamera "dibaca" 2x lebih sering per detik
+          qrbox: { width: 260, height: 260 },
+          aspectRatio: 1.0,
+          disableFlip: true,            // skip percobaan gambar dibalik/mirror -> proses tiap frame ~2x lebih cepat
+          videoConstraints: {
+            facingMode: "environment",
+            // minta resolusi & fokus yang bantu percepat autofokus/deteksi di HP yang mendukung
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            advanced: [{ focusMode: "continuous" }]
+          }
+        },
         onScanSuccess,
         ()=>{}
       );
